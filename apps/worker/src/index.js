@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { Agent } from "undici";
 
 const {
   SUPABASE_URL,
@@ -8,6 +9,7 @@ const {
   OPENSKY_POLL_INTERVAL_MS = "15000",
   OPENSKY_BOUNDS = "-90,-180,90,180",
   OPENSKY_REQUEST_TIMEOUT_MS = "20000",
+  OPENSKY_CONNECT_TIMEOUT_MS = "30000",
   OPENSKY_MAX_RETRIES = "3",
 } = process.env;
 
@@ -19,6 +21,10 @@ const supabase = hasSupabaseConfig
       auth: { persistSession: false, autoRefreshToken: false },
     })
   : null;
+
+const openSkyDispatcher = new Agent({
+  connectTimeout: Number(OPENSKY_CONNECT_TIMEOUT_MS),
+});
 
 function parseBounds(value) {
   const [lamin, lomin, lamax, lomax] = value.split(",").map(Number);
@@ -70,6 +76,7 @@ async function fetchWithTimeout(url, options = {}) {
   const signal = AbortSignal.timeout(timeoutMs);
   return fetch(url, {
     ...options,
+    dispatcher: openSkyDispatcher,
     signal,
   });
 }
