@@ -4,7 +4,7 @@ Flight Tracker is a live aircraft monitoring website built with Next.js, Supabas
 
 ## Required Links
 
-1. Vercel URL — Add your deployed frontend URL here after deployment.
+1. Vercel URL — https://flight-tracker-web-ten.vercel.app
 2. GitHub URL — https://github.com/aanchal-mpcs/FlightTracker
 
 ## Architecture
