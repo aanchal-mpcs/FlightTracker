@@ -6,6 +6,16 @@ Flight Tracker is a live aircraft monitoring website built with Next.js, Supabas
 
 1. Vercel URL — https://flight-tracker-web-ten.vercel.app
 2. GitHub URL — https://github.com/aanchal-mpcs/FlightTracker
+3. Video URL — https://design-build-ship.slack.com/files/U0ANL120022/F0AV7TRGAD6/aanchalsinghweek4.mov
+
+## Current Status
+
+- The frontend is live on Vercel.
+- The repository includes multiple commits showing iteration on UI, auth, and deployment work.
+- Sign-in and sign-up routes are implemented in the frontend.
+- The Railway worker and OpenSky integration were set up, but live polling from Railway to OpenSky is still unstable due to repeated token-request timeout failures.
+- Supabase Realtime wiring exists in the frontend, but fully working live updates depend on a stable worker deployment.
+- Personalized saved user preferences are not fully implemented yet.
 
 ## Architecture
 
