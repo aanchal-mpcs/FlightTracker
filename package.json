@@ -10,7 +10,7 @@
     "build:web": "npm --workspace apps/web run build",
     "lint:web": "npm --workspace apps/web run lint",
     "dev:worker": "npm --workspace apps/worker run dev",
-    "start:worker": "npm --workspace apps/worker run start"
+    "start:worker": "npm --workspace apps/worker run start",
+    "start": "npm --workspace apps/worker run start"
   }
 }
-
