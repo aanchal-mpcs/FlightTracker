@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { FlightSidebar } from "@/components/flight-sidebar";
 import { MapCanvas } from "@/components/map-canvas";
 import { REGION_FILTERS, SAMPLE_AIRCRAFT } from "@/lib/constants";
@@ -28,6 +29,12 @@ export default function HomePage() {
   const [aircraft, setAircraft] = useState<AircraftState[]>(SAMPLE_AIRCRAFT);
   const [selectedIcao24, setSelectedIcao24] = useState<string | null>(SAMPLE_AIRCRAFT[0]?.icao24 ?? null);
   const [status, setStatus] = useState(hasSupabaseEnv ? "Connecting to Supabase…" : "Showing seeded demo aircraft");
+  const [session, setSession] = useState<Session | null>(null);
+  const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-in");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMessage, setAuthMessage] = useState("Sign in or create an account right from the home page.");
+  const [authPending, setAuthPending] = useState(false);
 
   useEffect(() => {
     if (!hasSupabaseEnv) {
@@ -35,6 +42,16 @@ export default function HomePage() {
     }
 
     const supabase = getSupabaseBrowserClient();
+
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+    });
+
+    const {
+      data: { subscription: authSubscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
 
     async function loadInitialFeed() {
       const { data, error } = await supabase
@@ -80,9 +97,53 @@ export default function HomePage() {
       });
 
     return () => {
+      authSubscription.unsubscribe();
       void supabase.removeChannel(channel);
     };
   }, []);
+
+  async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!hasSupabaseEnv) {
+      setAuthMessage("Add Supabase env vars before using sign in.");
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    setAuthPending(true);
+    setAuthMessage(authMode === "sign-up" ? "Creating your account..." : "Signing you in...");
+
+    const response =
+      authMode === "sign-up"
+        ? await supabase.auth.signUp({ email, password })
+        : await supabase.auth.signInWithPassword({ email, password });
+
+    setAuthPending(false);
+
+    if (response.error) {
+      setAuthMessage(response.error.message);
+      return;
+    }
+
+    if (authMode === "sign-up") {
+      setAuthMessage("Account created. Check your email if confirmation is enabled, then sign in.");
+    } else {
+      setAuthMessage("Signed in.");
+    }
+  }
+
+  async function handleSignOut() {
+    if (!hasSupabaseEnv) {
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    setAuthPending(true);
+    const { error } = await supabase.auth.signOut();
+    setAuthPending(false);
+    setAuthMessage(error ? error.message : "Signed out.");
+  }
 
   const region = REGION_FILTERS.find((item) => item.id === regionId) ?? REGION_FILTERS[0];
   const normalizedQuery = query.trim().toLowerCase();
@@ -113,17 +174,89 @@ export default function HomePage() {
     <main className="page-shell">
       <section className="hero">
         <div>
-          <p className="eyebrow">OpenSky + Supabase + Next.js</p>
-          <h1>Monitor live aircraft positions worldwide.</h1>
+          <h1>track flights</h1>
           <p className="hero-copy">
             Filter by region, search by callsign, and watch planes move across the map from a realtime
             feed pushed through Supabase.
           </p>
         </div>
 
-        <div className="hero-status">
-          <span className="status-dot" />
-          <p>{status}</p>
+        <div className="hero-stack">
+          <div className="hero-status">
+            <span className="status-dot" />
+            <p>{status}</p>
+          </div>
+
+          <section className="auth-card">
+            <div className="auth-card__top">
+              <div>
+                <p className="eyebrow">account</p>
+                <h2>{session ? "you are signed in" : "sign in on the home page"}</h2>
+              </div>
+              {session ? (
+                <button type="button" className="auth-switch" onClick={handleSignOut} disabled={authPending}>
+                  sign out
+                </button>
+              ) : null}
+            </div>
+
+            {session ? (
+              <div className="auth-signed-in">
+                <p>{session.user.email}</p>
+                <span>{authMessage}</span>
+              </div>
+            ) : (
+              <>
+                <div className="auth-tabs">
+                  <button
+                    type="button"
+                    className={authMode === "sign-in" ? "auth-tab active" : "auth-tab"}
+                    onClick={() => setAuthMode("sign-in")}
+                  >
+                    sign in
+                  </button>
+                  <button
+                    type="button"
+                    className={authMode === "sign-up" ? "auth-tab active" : "auth-tab"}
+                    onClick={() => setAuthMode("sign-up")}
+                  >
+                    sign up
+                  </button>
+                </div>
+
+                <form className="auth-form" onSubmit={handleAuthSubmit}>
+                  <label>
+                    <span>Email</span>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    <span>Password</span>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="At least 6 characters"
+                      minLength={6}
+                      required
+                    />
+                  </label>
+
+                  <button type="submit" className="auth-submit" disabled={authPending}>
+                    {authPending ? "working..." : authMode}
+                  </button>
+                </form>
+
+                <p className="auth-message">{authMessage}</p>
+              </>
+            )}
+          </section>
         </div>
       </section>
 
