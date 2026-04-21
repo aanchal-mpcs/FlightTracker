@@ -7,6 +7,8 @@ const {
   OPENSKY_CLIENT_SECRET,
   OPENSKY_POLL_INTERVAL_MS = "15000",
   OPENSKY_BOUNDS = "-90,-180,90,180",
+  OPENSKY_REQUEST_TIMEOUT_MS = "20000",
+  OPENSKY_MAX_RETRIES = "3",
 } = process.env;
 
 const hasSupabaseConfig = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
@@ -57,24 +59,66 @@ function normalizeStateVector(state) {
   };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const timeoutMs = Number(OPENSKY_REQUEST_TIMEOUT_MS);
+  const signal = AbortSignal.timeout(timeoutMs);
+  return fetch(url, {
+    ...options,
+    signal,
+  });
+}
+
+async function withRetries(task, label) {
+  const maxRetries = Number(OPENSKY_MAX_RETRIES);
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      const backoffMs = attempt * 2000;
+      console.warn(`[worker] ${label} failed on attempt ${attempt}/${maxRetries}; retrying in ${backoffMs}ms`);
+      await sleep(backoffMs);
+    }
+  }
+
+  throw lastError;
+}
+
 async function getOpenSkyAccessToken() {
   if (!hasOpenSkyConfig) {
     throw new Error("Missing OPENSKY_CLIENT_ID or OPENSKY_CLIENT_SECRET");
   }
 
-  const response = await fetch(
-    "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: OPENSKY_CLIENT_ID,
-        client_secret: OPENSKY_CLIENT_SECRET,
-      }),
-    },
+  const response = await withRetries(
+    () =>
+      fetchWithTimeout(
+        "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: new URLSearchParams({
+            grant_type: "client_credentials",
+            client_id: OPENSKY_CLIENT_ID,
+            client_secret: OPENSKY_CLIENT_SECRET,
+          }),
+        },
+      ),
+    "OpenSky token request",
   );
 
   if (!response.ok) {
@@ -92,11 +136,15 @@ async function getOpenSkyAccessToken() {
 
 async function fetchOpenSkyStates() {
   const token = await getOpenSkyAccessToken();
-  const response = await fetch(buildStatesUrl(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const response = await withRetries(
+    () =>
+      fetchWithTimeout(buildStatesUrl(), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }),
+    "OpenSky states request",
+  );
 
   if (!response.ok) {
     const body = await response.text();
