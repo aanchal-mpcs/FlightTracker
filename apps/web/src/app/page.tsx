@@ -110,15 +110,91 @@ export default function HomePage() {
   const selectedAircraft =
     filteredAircraft.find((plane) => plane.icao24 === selectedIcao24) ?? filteredAircraft[0] ?? null;
 
+  const gameStats = useMemo(() => {
+    const inAirCount = filteredAircraft.filter((plane) => !plane.on_ground).length;
+    const fastMovers = filteredAircraft.filter((plane) => (plane.velocity ?? 0) > 220).length;
+    const countries = new Set(filteredAircraft.map((plane) => plane.origin_country).filter(Boolean)).size;
+    const scoutScore = Math.min(999, inAirCount * 6 + fastMovers * 9 + countries * 4);
+    const level = Math.max(1, Math.floor(scoutScore / 120) + 1);
+    const progress = scoutScore % 120;
+
+    return {
+      scoutScore,
+      level,
+      progress,
+      inAirCount,
+      fastMovers,
+      countries,
+    };
+  }, [filteredAircraft]);
+
+  const missionCards = useMemo(
+    () => [
+      {
+        title: "Spot 12 active aircraft",
+        progress: Math.min(100, Math.round((gameStats.inAirCount / 12) * 100)),
+        label: `${gameStats.inAirCount}/12 tracked`,
+      },
+      {
+        title: "Find 5 fast movers",
+        progress: Math.min(100, Math.round((gameStats.fastMovers / 5) * 100)),
+        label: `${gameStats.fastMovers}/5 over cruise pace`,
+      },
+      {
+        title: "Unlock 8 countries",
+        progress: Math.min(100, Math.round((gameStats.countries / 8) * 100)),
+        label: `${gameStats.countries}/8 origins found`,
+      },
+    ],
+    [gameStats.countries, gameStats.fastMovers, gameStats.inAirCount],
+  );
+
+  const badges = useMemo(() => {
+    const nextBadges = [];
+
+    if (gameStats.inAirCount >= 10) {
+      nextBadges.push("Sky Scanner");
+    }
+
+    if (gameStats.fastMovers >= 3) {
+      nextBadges.push("Speed Hunter");
+    }
+
+    if (gameStats.countries >= 5) {
+      nextBadges.push("World Watcher");
+    }
+
+    if (selectedAircraft?.velocity && selectedAircraft.velocity > 240) {
+      nextBadges.push("Jet Lock");
+    }
+
+    return nextBadges.length ? nextBadges : ["Runway Rookie"];
+  }, [gameStats.countries, gameStats.fastMovers, gameStats.inAirCount, selectedAircraft]);
+
   return (
     <main className="page-shell">
       <section className="hero">
         <div>
+          <p className="eyebrow">flight tracker arcade</p>
           <h1>track flights</h1>
           <p className="hero-copy">
-            Filter by region, search by callsign, and watch planes move across the map from a realtime
-            feed pushed through Supabase.
+            Scan the globe, rack up scout points, and complete live airspace missions as aircraft move.
           </p>
+
+          <div className="game-strip">
+            <div className="game-chip">
+              <span>scout score</span>
+              <strong>{gameStats.scoutScore}</strong>
+            </div>
+            <div className="game-chip">
+              <span>level</span>
+              <strong>{gameStats.level}</strong>
+            </div>
+            <div className="game-chip">
+              <span>badges</span>
+              <strong>{badges.length}</strong>
+            </div>
+          </div>
         </div>
 
         <div className="hero-stack">
@@ -170,6 +246,38 @@ export default function HomePage() {
         </label>
       </section>
 
+      <section className="scoreboard-row">
+        <article className="score-card">
+          <p className="eyebrow">live mission board</p>
+          <h2>airspace streak</h2>
+          <div className="score-card__value">{gameStats.inAirCount}</div>
+          <p className="score-card__copy">active aircraft currently in your scan zone</p>
+        </article>
+
+        <article className="score-card">
+          <p className="eyebrow">speed run</p>
+          <h2>fast movers</h2>
+          <div className="score-card__value">{gameStats.fastMovers}</div>
+          <p className="score-card__copy">targets exceeding high cruise pace</p>
+        </article>
+
+        <article className="score-card">
+          <p className="eyebrow">world unlocks</p>
+          <h2>countries</h2>
+          <div className="score-card__value">{gameStats.countries}</div>
+          <p className="score-card__copy">unique origin countries discovered in this view</p>
+        </article>
+
+        <article className="score-card score-card--progress">
+          <p className="eyebrow">level progress</p>
+          <h2>next unlock</h2>
+          <div className="progress-bar">
+            <span style={{ width: `${Math.max(8, Math.min(100, (gameStats.progress / 120) * 100))}%` }} />
+          </div>
+          <p className="score-card__copy">{120 - gameStats.progress} more points to the next level</p>
+        </article>
+      </section>
+
       <section className="dashboard">
         <MapCanvas
           aircraft={filteredAircraft}
@@ -178,6 +286,50 @@ export default function HomePage() {
           onSelect={setSelectedIcao24}
         />
         <FlightSidebar aircraft={filteredAircraft} selected={selectedAircraft} />
+      </section>
+
+      <section className="missions-row">
+        <div className="mission-panel">
+          <div className="mission-panel__head">
+            <div>
+              <p className="eyebrow">missions</p>
+              <h2>daily flight challenges</h2>
+            </div>
+            <span>{missionCards.length} active</span>
+          </div>
+
+          <div className="mission-list">
+            {missionCards.map((mission) => (
+              <article key={mission.title} className="mission-card">
+                <div className="mission-card__top">
+                  <h3>{mission.title}</h3>
+                  <span>{mission.progress}%</span>
+                </div>
+                <div className="progress-bar progress-bar--thin">
+                  <span style={{ width: `${Math.max(6, mission.progress)}%` }} />
+                </div>
+                <p>{mission.label}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="badge-panel">
+          <div className="mission-panel__head">
+            <div>
+              <p className="eyebrow">badge case</p>
+              <h2>earned unlocks</h2>
+            </div>
+          </div>
+          <div className="badge-grid">
+            {badges.map((badge) => (
+              <div key={badge} className="badge-token">
+                <span>★</span>
+                <strong>{badge}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     </main>
   );
